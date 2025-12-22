@@ -18,3 +18,29 @@ handling large volumes of student data.
 ## Why This Project Matters
 Early identification of at-risk students can help institutions improve retention rates,
 academic performance, and overall student success.
+
+## Model Selection
+
+Models tried:
+
+Logistic Regression
+
+Balanced Logistic Regression
+
+Decision Tree
+
+Random Forest
+
+Final model:
+
+Balanced Logistic Regression
+
+Reason:
+
+Best recall for at-risk students
+
+## Evaluation Metric
+
+Why recall > accuracy
+
+One short paragraph, no math
