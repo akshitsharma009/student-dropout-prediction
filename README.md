@@ -200,32 +200,6 @@ python train_models.py
 streamlit run streamlit_app/app.py
 ```
 
-**Run the Flask API:**
-```bash
-cd backend
-pip install -r requirements.txt
-python app.py
-# then POST to http://127.0.0.1:5000/predict
-```
-
----
-
-## 🚀 Deployment
-
-**Streamlit App (Streamlit Community Cloud, free):**
-1. Push this repo to GitHub.
-2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
-3. Click "New app", select this repo and the `main` branch.
-4. Set the main file path to `streamlit_app/app.py`.
-5. Deploy — Streamlit Cloud will install from the root `requirements.txt` automatically.
-6. Add the resulting live URL to the top of this README.
-
-**Flask API (Render, free tier):**
-1. Push this repo to GitHub.
-2. On [render.com](https://render.com), create a new Web Service from this repo.
-3. Set the root directory to `backend/`, build command to `pip install -r requirements.txt`, and start command to `gunicorn app:app` (add `gunicorn` to `backend/requirements.txt` first).
-4. Deploy and use the resulting URL as the API base.
-
 ---
 
 ## 🧠 What This Project Demonstrates
