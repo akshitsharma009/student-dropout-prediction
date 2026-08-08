@@ -20,9 +20,8 @@ This is **risk of academic failure**, used here as a practical, commonly-used pr
 
 ## 🚀 Live Demo
 
-- **Streamlit App:** *(add your live URL here after deployment — see [Deployment](#-deployment) below)*
+- **Streamlit App:** https://student-dropout-prediction-dqtjjqebhkz3m9jvyafjot.streamlit.app/
 - **Flask REST API:** runs locally / can be deployed separately (see [Deployment](#-deployment))
-
 ---
 
 ## 📌 Problem Statement
