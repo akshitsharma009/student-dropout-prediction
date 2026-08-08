@@ -1,6 +1,6 @@
-flask
-numpy
+streamlit
 pandas
-joblib
+numpy
 scikit-learn
 xgboost
+joblib

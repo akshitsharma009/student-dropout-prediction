@@ -1,192 +1,258 @@
-## 🎓 Student Dropout Risk Prediction System
-📌 Project Overview
+> This project was designed, implemented, and deployed by Akshit Sharma.
 
-Student dropout is a critical challenge for educational institutions and often goes unnoticed until it is too late.
-This project builds an end-to-end Machine Learning system that predicts student dropout risk using academic, behavioral, and support-related data.
+# 🎓 Student Academic Risk Prediction System
 
-The system goes beyond basic classification by using probability-based prediction, custom thresholds, and risk categorization to enable early and actionable intervention.
+An end-to-end Machine Learning system that identifies students at risk of academic failure using academic, behavioral, and family-background data, so schools can intervene early rather than reactively.
 
-🎯 Problem Statement
+---
 
-Manual monitoring of student performance does not scale well and makes early identification of at-risk students difficult, especially with large student populations.
+## ⚠️ A Note on the Target Variable (please read first)
 
-The challenge is to:
+This project uses the public **UCI Student Performance dataset**, which does **not** contain a literal dropout/withdrawal field. The target used throughout, `at_risk`, is defined as:
 
-Detect dropout risk early
-
-Minimize missed at-risk students
-
-Avoid over-flagging safe students
-
-✅ Objectives
-
-Analyze student academic and behavioral data
-
-Train multiple machine learning models to predict dropout risk
-
-Optimize recall for at-risk students
-
-Deploy the final model via a backend API for real-world usage
-
-💡 Why This Project Matters
-
-Early identification of at-risk students allows institutions to:
-
-Improve retention rates
-
-Provide timely academic support
-
-Reduce long-term academic and financial loss
-
-This project demonstrates how machine learning can support decision-making, not just prediction.
-
-📊 Exploratory Data Analysis & Model Training
-Models Evaluated
-
-The following models were trained and evaluated:
-
-Logistic Regression
-
-Balanced Logistic Regression
-
-Decision Tree
-
-Random Forest
-
-Final Model Selection
-
-Balanced Logistic Regression was selected as the final model.
-
-Reason:
-
-Delivered the best recall for at-risk students
-
-Reduced the number of missed dropout cases
-
-Provided interpretable probability outputs
-
-📈 Evaluation Metric
-Why Recall over Accuracy?
-
-In dropout prediction, missing an at-risk student is more costly than flagging a safe one.
-
-Therefore:
-
-Recall was prioritized over accuracy
-
-The objective was to minimize false negatives
-
-This aligns better with real-world academic intervention scenarios
-
-🎯 Threshold Tuning & Decision Strategy
-
-The default probability threshold of 0.5 was found to be suboptimal due to a high number of missed at-risk students.
-
-Improvements Achieved
-
-Recall improved from 62% to 88%
-
-False negatives were significantly reduced
-
-Final Threshold Strategy
-
-Although threshold experimentation identified 0.35 as optimal during training, the production system uses:
-
-Business Threshold: 0.6
-
-This avoids over-flagging borderline students
-
-Enables controlled, explainable decisions
-
-🚦 Risk Categorization (Production Logic)
-
-Instead of a binary output, predictions are grouped into risk buckets:
-
-Probability Range	Risk Level
-< 0.4	Low Risk
-0.4 – 0.6	Medium Risk
-≥ 0.6	High Risk
-
-This allows institutions to:
-
-Monitor medium-risk students
-
-Prioritize high-risk cases
-
-Avoid unnecessary intervention
-
-🔧 Model Persistence & Deployment Readiness
-
-The trained model was serialized using joblib
-
-Backend inference uses the same feature schema as training
-
-Threshold logic is configurable at inference time
-
-REST API built using Flask
-
-🗂 Project Structure
- ```student-dropout-prediction/
-│
-├── backend/
-│   ├── app.py
-│   └── utils/
-│       └── preprocess.py
-│
-├── models/
-│   └── dropout_model.pkl
-│
-├── notebooks/
-│   └── model_training_and_evaluation.ipynb
-│
-├── data/
-│   └── dataset.csv
-│
-├── README.md
-└── requirements.txt
+```
+at_risk = 1 if final grade (G3) < 10 out of 20, else 0
 ```
 
-🔌 API Example
-Request
+This is **risk of academic failure**, used here as a practical, commonly-used proxy for dropout risk in education ML research — a student who is consistently failing is at meaningfully elevated dropout risk in the real world, but this is not the same as observed withdrawal data. This distinction is stated plainly here rather than implied, since claiming "dropout prediction" without this caveat would be a misleading description of what the model actually does.
+
+---
+
+## 🚀 Live Demo
+
+- **Streamlit App:** *(add your live URL here after deployment — see [Deployment](#-deployment) below)*
+- **Flask REST API:** runs locally / can be deployed separately (see [Deployment](#-deployment))
+
+---
+
+## 📌 Problem Statement
+
+Manual monitoring of student performance doesn't scale well, and early identification of at-risk students is difficult, especially across large student populations. The challenge:
+
+- Detect academic-failure risk early
+- Minimize missed at-risk students (false negatives are costly — a missed student gets no intervention)
+- Avoid over-flagging safe students (false positives waste limited intervention resources)
+
+---
+
+## 🧠 System Design: Two Models for Two Points in the School Year
+
+A single model can't be both "usable on day one" and "maximally accurate" — the information that makes a model accurate (grades) doesn't exist yet at the start of term. So this system ships **two models**, matching two real deployment moments:
+
+| Model | When it's usable | Inputs | Cross-validated ROC-AUC |
+|---|---|---|---|
+| **Screener** | Day 1 of term, no grades needed | Demographics, study habits, family background, past failures, absences | **~0.71** |
+| **Early-Warning** | After the first two grading periods | Everything above **+ G1 and G2** (period grades) | **~0.97** |
+
+Using G1/G2 is **not label leakage** — they are recorded before the final grade G3 that defines the target, so they're a legitimate leading indicator (the same logic as using a mid-semester quiz score to flag risk before finals), not information from the future. It does mean the Early-Warning model can only be used once those grades exist, which is exactly why it's offered as a *second* mode rather than the only model.
+
+---
+
+## 🔧 Enhancements Made (Performance & Correctness Review)
+
+A review of the original single-model version surfaced three real issues, all fixed here:
+
+**1. Deployed threshold didn't match the validated threshold — the project's core claim was silently undone in production.** The original notebook tuned and validated a 0.35 decision threshold, improving recall from 62% to 88% on its test split. But both deployed apps (`backend/app.py`, `streamlit_app/app.py`) hardcoded `THRESHOLD = 0.6` — a value that was **never actually tested** in the notebook. Verifying it directly: at threshold 0.6, real recall was only **46.2%** — worse than doing nothing extra (the default 0.5 threshold), and the exact opposite of the project's stated goal of minimizing missed at-risk students. Fix: `backend/utils/config.py` is now the single source of truth for both thresholds, imported by the training script, the Flask API, and the Streamlit app — the same class of bug cannot happen again, because there is only one place these numbers are defined.
+
+**2. Only 8 of 30 available columns were used, with no cross-validation.** The original model used a single ~79-row test split (small and high-variance for a 395-row dataset) and ignored columns like parental education, alcohol consumption, family relationship quality, and school/family background. Fix: added 5-fold stratified cross-validation for reliable comparisons, expanded to the full available feature set, and compared Logistic Regression, Random Forest, and XGBoost — XGBoost with the expanded feature set won (~0.71 CV AUC vs. ~0.68 for the original 8-feature Logistic Regression).
+
+**3. No path to using period grades (G1/G2) even though they're legitimate, powerful signals.** Adding them (as a *second*, opt-in model, not a replacement) raised cross-validated ROC-AUC from ~0.71 to **~0.97** — by far the single biggest lever available in this dataset, and one the original version never explored.
+
+*(All numbers above are from an actual re-run of training and 5-fold cross-validation on this dataset — see `notebooks/02_model_enhancement.ipynb` for the full analysis.)*
+
+---
+
+## 📈 Results: Before vs. After
+
+| | Original (single 8-feature LR) | Screener (enhanced) | Early-Warning (enhanced) |
+|---|---:|---:|---:|
+| Features used | 8 | 21 (13 numeric + 8 binary) | 23 (+ G1, G2) |
+| Evaluation | single 79-row split | 5-fold CV | 5-fold CV |
+| ROC-AUC | ~0.68 | **~0.71** | **~0.97** |
+| Deployed threshold | 0.6 (never validated) | 0.35 (validated on OOF predictions) | 0.40 (validated on OOF predictions) |
+| Real recall at deployed threshold | **46.2%** (bug) | **~78%** | **~94%** |
+| Real precision at deployed threshold | 70.6% | ~43% | ~82% |
+
+The Early-Warning model's near-94% recall *and* ~82% precision means very few at-risk students are missed, without flooding staff with false alarms — a genuinely strong result, made possible mainly by using G1/G2 rather than by better tuning alone. The Screener model is intentionally more modest (moderate ~0.71 AUC) since day-1 behavioral/demographic data has real, honest limits — it's designed as a coarse first-pass flag, not a precise diagnosis, and the app explicitly recommends re-checking with the Early-Warning model once grades are available.
+
+---
+
+## 🎯 Risk Categorization (Production Logic)
+
+Instead of a bare binary output, predictions are grouped into risk buckets for actionable triage:
+
+| Probability Range | Risk Level |
+|---|---|
+| < 0.4 | Low Risk |
+| 0.4 – 0.6 | Medium Risk |
+| ≥ 0.6 | High Risk |
+
+The bucket is informational context; the actual At-Risk / Not-At-Risk decision uses the mode-specific validated threshold (0.35 or 0.40) described above, not the bucket boundaries.
+
+---
+
+## 📂 Project Structure
+
+```
+student-dropout-prediction/
+│
+├── backend/
+│   ├── app.py                    # Flask REST API (both modes)
+│   ├── requirements.txt
+│   └── utils/
+│       ├── config.py             # Shared feature lists + thresholds (single source of truth)
+│       └── preprocess.py         # Shared data loading + feature-row construction
+│
+├── streamlit_app/
+│   └── app.py                    # Streamlit UI (both modes, mode toggle)
+│
+├── models/
+│   ├── screener_model.pkl
+│   └── early_warning_model.pkl
+│
+├── notebooks/
+│   ├── 01_data_overview.ipynb           # Original EDA + first model
+│   └── 02_model_enhancement.ipynb       # This enhancement pass: CV, expanded features, G1/G2, threshold fix
+│
+├── data/
+│   └── student_data.csv
+│
+├── train_models.py               # Trains + saves both production models
+├── requirements.txt               # Root-level, for Streamlit Cloud deployment
+└── README.md
+```
+
+---
+
+## ⚙️ Tech Stack
+
+- Python, Pandas, NumPy
+- Scikit-learn (preprocessing, cross-validation, Logistic Regression, Random Forest)
+- XGBoost (final model for both Screener and Early-Warning)
+- Flask (REST API)
+- Streamlit (interactive demo UI)
+
+---
+
+## 🔌 API Examples
+
+### Screener mode (no grades required)
+**Request** — `POST /predict`
+```json
 {
+  "mode": "screener",
   "studytime": 2,
   "failures": 0,
   "absences": 4,
   "schoolsup": 1,
   "famsup": 1,
-  "paid": 0,
   "higher": 1,
   "internet": 1
 }
-
-Response
+```
+**Response**
+```json
 {
-  "prediction": "No Dropout",
-  "probability": 0.548,
+  "mode": "screener",
+  "prediction": "Not At Risk",
   "risk_level": "Medium Risk",
-  "threshold_used": 0.6
+  "probability": 0.437,
+  "threshold_used": 0.35
 }
+```
 
-🧠 What This Project Demonstrates
+### Early-Warning mode (after 2 grading periods)
+**Request** — `POST /predict`
+```json
+{
+  "mode": "early_warning",
+  "studytime": 2,
+  "failures": 1,
+  "absences": 10,
+  "G1": 6,
+  "G2": 5
+}
+```
+**Response**
+```json
+{
+  "mode": "early_warning",
+  "prediction": "At Risk",
+  "risk_level": "High Risk",
+  "probability": 0.957,
+  "threshold_used": 0.4
+}
+```
 
-Strong understanding of classification metrics
+Any field not supplied falls back to a dataset-derived median/majority-class default (documented in `backend/utils/preprocess.py`) rather than 0, since fields like age or parental education have valid ranges where 0 is not a real value the model was trained on.
 
-Real-world threshold tuning
+---
 
-End-to-end ML deployment mindset
+## ▶️ How to Run Locally
 
-Backend integration for ML inference
+**Retrain both models** (after any data/code change):
+```bash
+pip install -r requirements.txt
+python train_models.py
+```
 
-Decision-focused ML system design
+**Run the Streamlit app:**
+```bash
+streamlit run streamlit_app/app.py
+```
 
-🏁 Conclusion
+**Run the Flask API:**
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+# then POST to http://127.0.0.1:5000/predict
+```
 
-This project moves beyond academic modeling and demonstrates how machine learning can be applied responsibly in real educational environments.
-By combining probability, thresholds, and risk categorization, the system enables practical and explainable intervention.
+---
 
-👨‍💻 Author
+## 🚀 Deployment
+
+**Streamlit App (Streamlit Community Cloud, free):**
+1. Push this repo to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
+3. Click "New app", select this repo and the `main` branch.
+4. Set the main file path to `streamlit_app/app.py`.
+5. Deploy — Streamlit Cloud will install from the root `requirements.txt` automatically.
+6. Add the resulting live URL to the top of this README.
+
+**Flask API (Render, free tier):**
+1. Push this repo to GitHub.
+2. On [render.com](https://render.com), create a new Web Service from this repo.
+3. Set the root directory to `backend/`, build command to `pip install -r requirements.txt`, and start command to `gunicorn app:app` (add `gunicorn` to `backend/requirements.txt` first).
+4. Deploy and use the resulting URL as the API base.
+
+---
+
+## 🧠 What This Project Demonstrates
+
+- Honest framing of a proxy target variable rather than overclaiming what the data supports
+- Catching and fixing a real notebook-vs-production threshold mismatch that silently reversed the project's stated goal
+- Cross-validated model comparison instead of relying on a single small test split
+- Correctly distinguishing legitimate leading-indicator features (G1/G2, known before the outcome) from label leakage
+- A shared-config architecture so training and both serving surfaces (API + UI) can't drift apart
+- Multi-mode system design for a real deployment constraint (information availability changes over the school year)
+
+---
+
+## 🔮 Future Improvements
+
+- Add SHAP-based explainability for individual predictions (which factors drove a specific student's risk score)
+- Add authentication + a small database for a real institutional deployment (currently stateless, single-prediction)
+- Explore a third "mid-warning" mode using only G1 (available even earlier than G1+G2)
+- Add automated regression tests that fail CI if retraining drops ROC-AUC below a floor
+- Validate against a genuine longitudinal dropout dataset if one becomes available, to test how well the G3-based proxy actually correlates with real withdrawal outcomes
+
+---
+
+## 👤 Author
 
 Akshit Sharma
 B.Tech | Data Science & Machine Learning
-GitHub: (https://github.com/akshitsharma009)
-LinkedIn: (https://www.linkedin.com/in/akshit-sharma-7427362a0)
+GitHub: https://github.com/akshitsharma009
+LinkedIn: https://www.linkedin.com/in/akshit-sharma-7427362a0
